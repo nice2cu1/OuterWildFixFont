@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/ow-mods/owml/master/schemas/manifest_schema.json",
+  "filename": "OuterWildFixFont.dll",
+  "author": "nice2cu1",
+  "name": "OuterWildFixFont",
+  "uniqueName": "nice2cu1.OuterWildFixFont",
+  "version": "0.1.0",
+  "owmlVersion": "2.9.0",
+  "dependencies": []
+}

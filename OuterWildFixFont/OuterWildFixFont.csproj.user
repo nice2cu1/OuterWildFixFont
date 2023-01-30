@@ -1,0 +1,5 @@
+﻿<Project>
+  <PropertyGroup>
+    <OutputPath>$(AppData)\OuterWildsModManager\OWML\Mods\nice2cu1.OuterWildFixFont</OutputPath>
+  </PropertyGroup>
+</Project>
