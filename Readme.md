@@ -1,5 +1,3 @@
-~~针对[Outer-Wilds-The-Outsider](https://github.com/StreetlightsBehindTheTrees/Outer-Wilds-The-Outsider)的修补~~
-
 The mod fixes the problem that most of the Chinese-inclusive story mod text is incomplete by replacing the fonts of some interfaces.
 
 It can be used to repair the Chinese translation of all stories of Outer Wilds.
