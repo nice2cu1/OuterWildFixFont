@@ -1,5 +1,17 @@
 ~~针对[Outer-Wilds-The-Outsider](https://github.com/StreetlightsBehindTheTrees/Outer-Wilds-The-Outsider)的修补~~
 
+The mod fixes the problem that most of the Chinese-inclusive story mod text is incomplete by replacing the fonts of some interfaces.
+
+It can be used to repair the Chinese translation of all stories of Outer Wilds.
+
+This patch is to solve the problem of incomplete fonts of Outer Wilds' self-made translation in the Chinese environment.
+
+The font of the character dialog box and the Nomai text translator have been replaced, so that the missing text can be displayed normally in the Chinese environment.
+
+The font fragmentation caused by too much log information was fixed by modifying the font size of the spacecraft log (only exists in Chinese)
+
+Originally founded by [The Outsider] (https://github.com/StreetlightsBehindTheTrees/Outer-Wilds-The-Outsider) did not provide translation channels. The project.
+
 可用于Outer Wilds所有故事中文翻译的修补
 
 这个补丁是为了解决Outer Wilds在中文环境下自制翻译的字库不全问题。
