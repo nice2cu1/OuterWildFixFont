@@ -1,126 +1,113 @@
-﻿using OWML.Common;
+﻿using System;
+using System.Collections.Generic;
+using OWML.Common;
 using OWML.ModHelper;
-using System;
-using TMPro;
 using UnityEngine;
-using System.IO;
-using HarmonyLib;
 using UnityEngine.UI;
 
 namespace OuterWildFixFont
 {
     public class OuterWildFixFont : ModBehaviour
     {
-        private static OuterWildFixFont Instance;
+        private static Font _translateFont;
         private static Font _hudFont;
-        private static Font TranslateFont;
-        private static TMP_FontAsset TMPTranslateFont;
-        static string chineseTxt = null;
-        private static UnityEngine.Font baseFont;
-
-        public void LoadFont(string fontName)
-        {
-            try
-            {
-                string path = $"{ModHelper.OwmlConfig.ModsPath}/{ModHelper.Manifest.UniqueName}/Font/{fontName}";
-                if (File.Exists(path))
-                {
-                    var ab = AssetBundle.LoadFromFile(path);
-                    TranslateFont = ab.LoadAsset<Font>(fontName);
-                    TMPTranslateFont = ab.LoadAsset<TMP_FontAsset>($"{fontName} SDF");
-                    if (TranslateFont != null && TMPTranslateFont != null)
-                    {
-                    }
-                    else
-                    {
-                        ModHelper.Console.WriteLine("$The font file is damaged. Please check the file.",
-                            MessageType.Error);
-                    }
-
-                    ab.Unload(false);
-                }
-                else
-                {
-                    ModHelper.Console.WriteLine($"Font {fontName} not found, Please check the path: {path}",
-                        MessageType.Error);
-                }
-            }
-            catch (Exception e)
-            {
-                ModHelper.Console.WriteLine($"Load font exception:{e.Message}\n{e.StackTrace}", MessageType.Error);
-            }
-        }
-
-        private void Awake()
-        {
-            // You won't be able to access OWML's mod helper in Awake.
-            // So you probably don't want to do anything here.
-            // Use Start() instead.
-            Instance = this;
-        }
-
+        private static Font _originFont;
         private void Start()
         {
+            LoadPingFang();
             ModHelper.Console.WriteLine($"My mod {nameof(OuterWildFixFont)} is loaded!", MessageType.Success);
-            _hudFont = Resources.Load<Font>(@"fonts/english - latin/SpaceMono-Regular_Dynamic");
-            LoadFont("pingfang");
-            Harmony.CreateAndPatchAll(typeof(OuterWildFixFont));
-            FixBrokenWord();
+            ModHelper.HarmonyHelper.AddPrefix<TextTranslation>("GetFont", typeof(OuterWildFixFont), nameof(OuterWildFixFont.GetFont));
+            ModHelper.HarmonyHelper.AddPrefix<NomaiTranslatorProp>("InitializeFont", typeof(OuterWildFixFont), nameof(OuterWildFixFont.InitTranslatorFont));
+            ModHelper.HarmonyHelper.AddPrefix<DialogueBoxVer2>("InitializeFont", typeof(OuterWildFixFont), nameof(OuterWildFixFont.InitTranslatorFontDialogue));
+            ModHelper.HarmonyHelper.AddPrefix<FontAndLanguageController>("InitializeFont", typeof(OuterWildFixFont), nameof(OuterWildFixFont.InitializeFont));
+            ModHelper.HarmonyHelper.AddPostfix<GameOverController>("SetupGameOverScreen", typeof(OuterWildFixFont), nameof(OuterWildFixFont.SetGameOverScreenFont));
         }
 
-        private void FixBrokenWord()
+        private void Update()
         {
-            if (chineseTxt == null)
-            {
-                try
-                {
-                    AssetBundle words = ModHelper.Assets.LoadBundle("words");
-                    TextAsset textAsset = words.LoadAsset<TextAsset>("chineseWords.txt");
-                    if (textAsset != null)
-                    {
-                        chineseTxt = textAsset.text;
-                        ModHelper.Console.WriteLine("chineseWords.txt loaded");
+           GameObject SignalScreen = GameObject.Find("Ship_Body/Module_Cockpit/Systems_Cockpit/ShipCockpitUI/SignalScreen/SignalScreenPivot/SigScopeDisplay/VerticalLayoutGroup/");
+           if (SignalScreen)
+           {
+               Transform frequencyLabelTransform = SignalScreen.transform.Find("FrequencyLabel");
+               Transform distanceLabellTransform = SignalScreen.transform.Find("DistanceLabel");
+               
+               if (frequencyLabelTransform && frequencyLabelTransform.gameObject.activeSelf)
+               {
+                   Text frequencyLabel = frequencyLabelTransform.GetComponent<Text>();
+                   if (frequencyLabel)
+                   {
+                       frequencyLabel.fontSize = 48;
+                       frequencyLabel.font = _originFont;
+                   }
+               }
 
-                        if (TranslateFont != null)
-                        {
-                            Texture texture = TranslateFont.material.mainTexture;
-                            ModHelper.Console.WriteLine(string.Format("Old TranslateFont texture:{0}   {1}",
-                                texture.width, texture.height));
-                            TranslateFont.RequestCharactersInTexture(chineseTxt, 54);
+               if (distanceLabellTransform && distanceLabellTransform.gameObject.activeSelf)
+               {
+                   Text distanceLabel = distanceLabellTransform.GetComponent<Text>();
+                   if (distanceLabel)
+                   {
+                       distanceLabel.fontSize = 48;
+                       distanceLabel.font = _originFont;
+                   }
+               }
+           }
 
-                            ModHelper.Console.WriteLine(string.Format("New TranslateFont texture:{0}   {1}",
-                                texture.width, texture.height));
-                        }
-
-                        if (baseFont != null)
-                        {
-                            Texture texture = baseFont.material.mainTexture;
-                            ModHelper.Console.WriteLine(string.Format("Old baseFont texture:{0}   {1}",
-                                texture.width, texture.height));
-                            baseFont.RequestCharactersInTexture(chineseTxt, 54);
-                            ModHelper.Console.WriteLine(string.Format("New baseFont texture:{0}   {1}",
-                                texture.width, texture.height));
-                        }
-                    }
-                    else
-                        ModHelper.Console.WriteLine("chineseWords.txt not found", MessageType.Error);
-                }
-                catch (Exception e)
-                {
-                    ModHelper.Console.WriteLine(e.ToString(), MessageType.Success);
-                    throw;
-                }
-            }
         }
 
+        private void LoadPingFang()
+        {
+            string path = $"{ModHelper.OwmlConfig.ModsPath}/{ModHelper.Manifest.UniqueName}/Font/pingfang";
+            var ab = AssetBundle.LoadFromFile(path);
+            _translateFont = ab.LoadAsset<Font>("PingFang");
+            _hudFont = Resources.Load<Font>(@"fonts/chinese/urw global - nimbussanschs medium_dynamic");
+            _originFont = Resources.Load<Font>(@"fonts/chinese/urw global - nimbussanschs medium");
+            //URW Global - NimbusSansCHS Medium
+            ab.Unload(false);
+        }
+        
+        private static bool GetFont(
+            bool dynamicFont,
+            ref Font __result)
+        {
+            if (TextTranslation.Get().GetLanguage() != TextTranslation.Language.CHINESE_SIMPLE)
+            {
+                return true;
+            }
 
-        //人物对话框
-        [HarmonyPrefix, HarmonyPatch(typeof(DialogueBoxVer2), "InitializeFont")]
-        public static bool InitializeFontPatch(DialogueBoxVer2 __instance)
+            if (dynamicFont)
+            {
+                __result = _translateFont;
+            }
+            else
+            {
+                __result = _translateFont;
+            }
+            return false;
+        }
+        private static bool InitTranslatorFont(
+            ref Font ____fontInUse,
+            ref Font ____dynamicFontInUse,
+            ref float ____fontSpacingInUse,
+            ref Text ____textField)
+        {
+            if (TextTranslation.Get().GetLanguage() != TextTranslation.Language.CHINESE_SIMPLE)
+            {
+                return true;
+            }
+
+            ____fontInUse = _translateFont;
+            ____dynamicFontInUse = _translateFont;
+            ____fontSpacingInUse = TextTranslation.GetDefaultFontSpacing();
+            ____textField.font = ____fontInUse;
+            ____textField.lineSpacing = ____fontSpacingInUse;
+            return false;
+        }
+
+        private static bool InitTranslatorFontDialogue(DialogueBoxVer2 __instance)
         {
             DialogueOptionUI requiredComponent =
                 __instance._optionBox.GetRequiredComponent<DialogueOptionUI>();
-            __instance._fontInUse = TranslateFont;
+            __instance._fontInUse = _translateFont;
             if (TextTranslation.Get().IsLanguageLatin())
             {
                 __instance._dynamicFontInUse = __instance._defaultDialogueFontDynamic;
@@ -142,34 +129,16 @@ namespace OuterWildFixFont
 
             return false;
         }
-
-        //挪麦文字翻译器
-        [HarmonyPrefix, HarmonyPatch(typeof(NomaiTranslatorProp), "InitializeFont")]
-        public static bool InitializeFontPatch(NomaiTranslatorProp __instance)
+        
+        private static void SetGameOverScreenFont(ref Text ____deathText)
         {
-            __instance._fontInUse = TranslateFont;
-            if (TextTranslation.Get().IsLanguageLatin())
-            {
-                __instance._dynamicFontInUse = __instance._defaultPropFontDynamic;
-                __instance._fontSpacingInUse = __instance._defaultFontSpacing;
-            }
-            else
-            {
-                __instance._dynamicFontInUse = TextTranslation.GetFont(true);
-                __instance._fontSpacingInUse = TextTranslation.GetDefaultFontSpacing();
-            }
-
-            __instance._textField.font = __instance._fontInUse;
-            __instance._textField.lineSpacing = __instance._fontSpacingInUse;
-            return false;
+            ____deathText.font = TextTranslation.GetFont(false);
         }
 
-
-        // FontAndLanguageController
-        [HarmonyPrefix, HarmonyPatch(typeof(FontAndLanguageController), "InitializeFont")]
-        public static bool InitializeFontPatch(FontAndLanguageController __instance)
+        
+        private static bool InitializeFont(FontAndLanguageController __instance)
         {
-            Font languageFont = _hudFont;
+            Font languageFont = _translateFont;
             bool flag = TextTranslation.Get().IsLanguageLatin();
             for (int i = 0; i < __instance._textContainerList.Count; i++)
             {
@@ -234,7 +203,7 @@ namespace OuterWildFixFont
                     Font font = TextTranslation.GetFont(__instance._textContainerList[i].originalFont.dynamic);
                     if (__instance._textContainerList[i].originalFont == font)
                     {
-                        __instance._textContainerList[i].textElement.font = languageFont;
+                        __instance._textContainerList[i].textElement.font = _hudFont;
                         __instance._textContainerList[i].textElement.lineSpacing =
                             __instance._textContainerList[i].originalSpacing;
                         __instance._textContainerList[i].textElement.fontSize =
