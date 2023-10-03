@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using OWML.Common;
+﻿using OWML.Common;
 using OWML.ModHelper;
 using UnityEngine;
 using UnityEngine.UI;
@@ -12,46 +10,55 @@ namespace OuterWildFixFont
         private static Font _translateFont;
         private static Font _hudFont;
         private static Font _originFont;
+
         private void Start()
         {
             LoadPingFang();
             ModHelper.Console.WriteLine($"My mod {nameof(OuterWildFixFont)} is loaded!", MessageType.Success);
-            ModHelper.HarmonyHelper.AddPrefix<TextTranslation>("GetFont", typeof(OuterWildFixFont), nameof(OuterWildFixFont.GetFont));
-            ModHelper.HarmonyHelper.AddPrefix<NomaiTranslatorProp>("InitializeFont", typeof(OuterWildFixFont), nameof(OuterWildFixFont.InitTranslatorFont));
-            ModHelper.HarmonyHelper.AddPrefix<DialogueBoxVer2>("InitializeFont", typeof(OuterWildFixFont), nameof(OuterWildFixFont.InitTranslatorFontDialogue));
-            ModHelper.HarmonyHelper.AddPrefix<FontAndLanguageController>("InitializeFont", typeof(OuterWildFixFont), nameof(OuterWildFixFont.InitializeFont));
-            ModHelper.HarmonyHelper.AddPostfix<GameOverController>("SetupGameOverScreen", typeof(OuterWildFixFont), nameof(OuterWildFixFont.SetGameOverScreenFont));
+            ModHelper.HarmonyHelper.AddPrefix<TextTranslation>("GetFont", typeof(OuterWildFixFont),
+                nameof(OuterWildFixFont.GetFont));
+            ModHelper.HarmonyHelper.AddPrefix<NomaiTranslatorProp>("InitializeFont", typeof(OuterWildFixFont),
+                nameof(OuterWildFixFont.InitTranslatorFont));
+            ModHelper.HarmonyHelper.AddPrefix<DialogueBoxVer2>("InitializeFont", typeof(OuterWildFixFont),
+                nameof(OuterWildFixFont.InitTranslatorFontDialogue));
+            ModHelper.HarmonyHelper.AddPrefix<FontAndLanguageController>("InitializeFont", typeof(OuterWildFixFont),
+                nameof(OuterWildFixFont.InitializeFont));
+            ModHelper.HarmonyHelper.AddPrefix<ShipLogEntryListItem>("Setup", typeof(OuterWildFixFont),
+                nameof(OuterWildFixFont.InitSetup));
+            ModHelper.HarmonyHelper.AddPostfix<GameOverController>("SetupGameOverScreen", typeof(OuterWildFixFont),
+                nameof(OuterWildFixFont.SetGameOverScreenFont));
         }
 
         private void Update()
         {
-           GameObject SignalScreen = GameObject.Find("Ship_Body/Module_Cockpit/Systems_Cockpit/ShipCockpitUI/SignalScreen/SignalScreenPivot/SigScopeDisplay/VerticalLayoutGroup/");
-           if (SignalScreen)
-           {
-               Transform frequencyLabelTransform = SignalScreen.transform.Find("FrequencyLabel");
-               Transform distanceLabellTransform = SignalScreen.transform.Find("DistanceLabel");
-               
-               if (frequencyLabelTransform && frequencyLabelTransform.gameObject.activeSelf)
-               {
-                   Text frequencyLabel = frequencyLabelTransform.GetComponent<Text>();
-                   if (frequencyLabel)
-                   {
-                       frequencyLabel.fontSize = 48;
-                       frequencyLabel.font = _originFont;
-                   }
-               }
+            GameObject SignalScreen =
+                GameObject.Find(
+                    "Ship_Body/Module_Cockpit/Systems_Cockpit/ShipCockpitUI/SignalScreen/SignalScreenPivot/SigScopeDisplay/VerticalLayoutGroup/");
+            if (SignalScreen)
+            {
+                Transform frequencyLabelTransform = SignalScreen.transform.Find("FrequencyLabel");
+                Transform distanceLabellTransform = SignalScreen.transform.Find("DistanceLabel");
 
-               if (distanceLabellTransform && distanceLabellTransform.gameObject.activeSelf)
-               {
-                   Text distanceLabel = distanceLabellTransform.GetComponent<Text>();
-                   if (distanceLabel)
-                   {
-                       distanceLabel.fontSize = 48;
-                       distanceLabel.font = _originFont;
-                   }
-               }
-           }
+                if (frequencyLabelTransform && frequencyLabelTransform.gameObject.activeSelf)
+                {
+                    Text frequencyLabel = frequencyLabelTransform.GetComponent<Text>();
+                    if (frequencyLabel)
+                    {
+                        frequencyLabel.fontSize = 48;
+                        frequencyLabel.font = _originFont;
+                    }
+                }
 
+                if (distanceLabellTransform && distanceLabellTransform.gameObject.activeSelf)
+                {
+                    Text distanceLabel = distanceLabellTransform.GetComponent<Text>();
+                    if (distanceLabel)
+                    {
+                        distanceLabel.fontSize = 48;
+                        distanceLabel.font = _originFont;
+                    }
+                }
+            }
         }
 
         private void LoadPingFang()
@@ -64,7 +71,7 @@ namespace OuterWildFixFont
             //URW Global - NimbusSansCHS Medium
             ab.Unload(false);
         }
-        
+
         private static bool GetFont(
             bool dynamicFont,
             ref Font __result)
@@ -82,8 +89,10 @@ namespace OuterWildFixFont
             {
                 __result = _translateFont;
             }
+
             return false;
         }
+
         private static bool InitTranslatorFont(
             ref Font ____fontInUse,
             ref Font ____dynamicFontInUse,
@@ -105,37 +114,49 @@ namespace OuterWildFixFont
 
         private static bool InitTranslatorFontDialogue(DialogueBoxVer2 __instance)
         {
-            DialogueOptionUI requiredComponent =
-                __instance._optionBox.GetRequiredComponent<DialogueOptionUI>();
-            __instance._fontInUse = _translateFont;
             if (TextTranslation.Get().IsLanguageLatin())
             {
+                __instance._fontInUse = __instance._defaultDialogueFont;
                 __instance._dynamicFontInUse = __instance._defaultDialogueFontDynamic;
-                __instance._fontSpacingInUse = __instance._defaultFontSpacing;
             }
             else
             {
+                __instance._fontInUse = TextTranslation.GetFont(false);
                 __instance._dynamicFontInUse = TextTranslation.GetFont(true);
-                __instance._fontSpacingInUse = TextTranslation.GetDefaultFontSpacing();
             }
 
             __instance._mainTextField.font = __instance._fontInUse;
-            __instance._mainTextField.lineSpacing = __instance._fontSpacingInUse;
             __instance._nameTextField.font = __instance._fontInUse;
-            __instance._nameTextField.lineSpacing = __instance._fontSpacingInUse;
-            requiredComponent.textElement.font = __instance._fontInUse;
-            requiredComponent._optionText.font = __instance._fontInUse;
-            requiredComponent.textElement.lineSpacing = __instance._fontSpacingInUse;
+            __instance._optionBox.GetRequiredComponent<DialogueOptionUI>().textElement.font = __instance._fontInUse;
 
             return false;
         }
-        
+
         private static void SetGameOverScreenFont(ref Text ____deathText)
         {
             ____deathText.font = TextTranslation.GetFont(false);
         }
 
-        
+        // 1.1.14 new
+        private static bool InitSetup(ShipLogEntryListItem __instance, ShipLogEntry entry, float appearDelay)
+        {
+            __instance._entry = entry;
+            __instance.UpdateNameField();
+            __instance._unreadIcon.gameObject.SetActive(false);
+            __instance._hudMarkerIcon.gameObject.SetActive(false);
+            __instance._moreToExploreIcon.gameObject.SetActive(false);
+            __instance.gameObject.SetActive(true);
+            __instance._animRoot.anchoredPosition = new Vector2(-10f, 0.0f);
+            __instance._animAlpha = 0.0f;
+            __instance._hasFocus = false;
+            __instance._focusAlpha = 0.2f;
+            __instance.UpdateAlpha();
+            // __instance._uiSizeSetter.MarkReadyForInitialization();
+            // __instance._uiSizeSetter.DoResizeAction(PlayerData.GetTextSize());
+            __instance.AnimateTo(1f, __instance.GetEntryIndentation(), 0.05f, appearDelay);
+            return false;
+        }
+
         private static bool InitializeFont(FontAndLanguageController __instance)
         {
             Font languageFont = _translateFont;
@@ -207,7 +228,7 @@ namespace OuterWildFixFont
                         __instance._textContainerList[i].textElement.lineSpacing =
                             __instance._textContainerList[i].originalSpacing;
                         __instance._textContainerList[i].textElement.fontSize =
-                            12;
+                            10;
                         // TextTranslation.GetModifiedFontSize(__instance._textContainerList[i].originalFontSize);
                         __instance._textContainerList[i].textElement.rectTransform.localScale =
                             __instance._textContainerList[i].originalScale;
