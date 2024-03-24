@@ -1,5 +1,7 @@
 ﻿using OWML.Common;
 using OWML.ModHelper;
+using System;
+using System.Runtime.CompilerServices;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -27,37 +29,44 @@ namespace OuterWildFixFont
                 nameof(OuterWildFixFont.InitSetup));
             ModHelper.HarmonyHelper.AddPostfix<GameOverController>("SetupGameOverScreen", typeof(OuterWildFixFont),
                 nameof(OuterWildFixFont.SetGameOverScreenFont));
+            ModHelper.HarmonyHelper.AddPostfix<SignalscopeUI>("Activate", typeof(OuterWildFixFont),
+                nameof(OuterWildFixFont.Activate));
         }
 
         private void Update()
         {
-            GameObject SignalScreen =
-                GameObject.Find(
-                    "Ship_Body/Module_Cockpit/Systems_Cockpit/ShipCockpitUI/SignalScreen/SignalScreenPivot/SigScopeDisplay/VerticalLayoutGroup/");
-            if (SignalScreen)
+            //飞船控制台处理
+            //Ship_Body / Module_Cockpit / Systems_Cockpit / ShipCockpitUI / CockpitCanvases / ShipWorldSpaceUI / ConsoleDisplay / Mask / LayoutGroup /
+            GameObject ConsoleDisplay = GameObject.Find(
+                               "Ship_Body/Module_Cockpit/Systems_Cockpit/ShipCockpitUI/CockpitCanvases/ShipWorldSpaceUI/ConsoleDisplay/Mask/LayoutGroup");
+            if (ConsoleDisplay)
             {
-                Transform frequencyLabelTransform = SignalScreen.transform.Find("FrequencyLabel");
-                Transform distanceLabellTransform = SignalScreen.transform.Find("DistanceLabel");
-
-                if (frequencyLabelTransform && frequencyLabelTransform.gameObject.activeSelf)
+                Transform consoleTextTransform = ConsoleDisplay.transform.Find("TextTemplate");
+                if (consoleTextTransform && consoleTextTransform.gameObject.activeSelf)
                 {
-                    Text frequencyLabel = frequencyLabelTransform.GetComponent<Text>();
-                    if (frequencyLabel)
+                    Text consoleText = consoleTextTransform.GetComponent<Text>();
+                    if (consoleText)
                     {
-                        frequencyLabel.fontSize = 48;
-                        frequencyLabel.font = _originFont;
+                        consoleText.fontSize = 48;
+                        consoleText.font = _originFont;
                     }
                 }
-
-                if (distanceLabellTransform && distanceLabellTransform.gameObject.activeSelf)
+                foreach (Transform child in ConsoleDisplay.transform)
                 {
-                    Text distanceLabel = distanceLabellTransform.GetComponent<Text>();
-                    if (distanceLabel)
+                    if (child.name == "TextTemplate(Clone)")
                     {
-                        distanceLabel.fontSize = 48;
-                        distanceLabel.font = _originFont;
+                        Text consoleText = child.GetComponent<Text>();
+                        if (consoleText)
+                        {
+                            consoleText.fontSize = 48;
+                            consoleText.font = _originFont;
+                        }
                     }
                 }
+            }
+            else
+            {
+                ModHelper.Console.WriteLine("not fount ConsoleDisplay");
             }
         }
 
@@ -135,6 +144,14 @@ namespace OuterWildFixFont
         private static void SetGameOverScreenFont(ref Text ____deathText)
         {
             ____deathText.font = TextTranslation.GetFont(false);
+        }
+
+        private static void Activate(SignalscopeUI __instance)
+        {
+            __instance._signalscopeLabel.font = _originFont;
+            __instance._signalscopeLabel.fontSize = 48;
+            __instance._distanceLabel.font = _originFont;
+            __instance._distanceLabel.fontSize = 48;
         }
 
         // 1.1.14 new
