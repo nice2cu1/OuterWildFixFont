@@ -1,7 +1,5 @@
 ﻿using OWML.Common;
 using OWML.ModHelper;
-using System;
-using System.Runtime.CompilerServices;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -10,8 +8,18 @@ namespace OuterWildFixFont
     public class OuterWildFixFont : ModBehaviour
     {
         private static Font _translateFont;
-        private static Font _hudFont;
         private static Font _originFont;
+        private static int _shipLogFontSize = 15;
+        private static bool _isFontSizeSet = false;
+        private GameObject ConsoleDisplay = null;
+        private static OuterWildFixFont Instance;
+        private bool _isConsoleTextSet = false;
+        private static Font _hudFont;
+
+        public void Awake()
+        {
+            Instance = this;
+        }
 
         private void Start()
         {
@@ -27,52 +35,67 @@ namespace OuterWildFixFont
                 nameof(OuterWildFixFont.InitializeFont));
             ModHelper.HarmonyHelper.AddPrefix<ShipLogEntryListItem>("Setup", typeof(OuterWildFixFont),
                 nameof(OuterWildFixFont.InitSetup));
+            ModHelper.HarmonyHelper.AddPrefix<ShipLogEntryDescriptionField>("Update", typeof(OuterWildFixFont),
+                nameof(OuterWildFixFont.ShipLogEntryDescriptionFieldUpdate));
             ModHelper.HarmonyHelper.AddPostfix<GameOverController>("SetupGameOverScreen", typeof(OuterWildFixFont),
                 nameof(OuterWildFixFont.SetGameOverScreenFont));
             ModHelper.HarmonyHelper.AddPostfix<SignalscopeUI>("Activate", typeof(OuterWildFixFont),
                 nameof(OuterWildFixFont.Activate));
         }
 
+        public override void Configure(IModConfig config)
+        {
+            _shipLogFontSize = config.GetSettingsValue<int>("ShipLogFontSize");
+            _isFontSizeSet = false;
+        }
+
         private void Update()
         {
-            //飞船控制台处理
-            //Ship_Body / Module_Cockpit / Systems_Cockpit / ShipCockpitUI / CockpitCanvases / ShipWorldSpaceUI / ConsoleDisplay / Mask / LayoutGroup /
-            GameObject ConsoleDisplay = GameObject.Find(
-                               "Ship_Body/Module_Cockpit/Systems_Cockpit/ShipCockpitUI/CockpitCanvases/ShipWorldSpaceUI/ConsoleDisplay/Mask/LayoutGroup");
-            if (ConsoleDisplay)
+            var onEnterShip = PlayerState._insideShip;
+
+            if (!_isConsoleTextSet && onEnterShip)
             {
-                Transform consoleTextTransform = ConsoleDisplay.transform.Find("TextTemplate");
-                if (consoleTextTransform && consoleTextTransform.gameObject.activeSelf)
+                ConsoleDisplay =
+                    GameObject.Find(
+                        "Ship_Body/Module_Cockpit/Systems_Cockpit/ShipCockpitUI/CockpitCanvases/ShipWorldSpaceUI/ConsoleDisplay/Mask/LayoutGroup");
+                if (ConsoleDisplay)
                 {
-                    Text consoleText = consoleTextTransform.GetComponent<Text>();
-                    if (consoleText)
+                    Transform consoleTextTransform = ConsoleDisplay.transform.Find("TextTemplate");
+                    if (consoleTextTransform && consoleTextTransform.gameObject.activeSelf)
                     {
-                        consoleText.fontSize = 48;
-                        consoleText.font = _originFont;
-                    }
-                }
-                foreach (Transform child in ConsoleDisplay.transform)
-                {
-                    if (child.name == "TextTemplate(Clone)")
-                    {
-                        Text consoleText = child.GetComponent<Text>();
+                        Text consoleText = consoleTextTransform.GetComponent<Text>();
                         if (consoleText)
                         {
                             consoleText.fontSize = 48;
                             consoleText.font = _originFont;
+                            _isConsoleTextSet = true;
+                            Instance.ModHelper.Console.WriteLine("Set ConsoleDisplay TextTemplate font size to 48",
+                                MessageType.Info);
+                        }
+                    }
+
+                    foreach (Transform child in ConsoleDisplay.transform)
+                    {
+                        if (child.name == "TextTemplate(Clone)")
+                        {
+                            Text consoleText = child.GetComponent<Text>();
+                            if (consoleText)
+                            {
+                                consoleText.fontSize = 48;
+                                consoleText.font = _originFont;
+                                _isConsoleTextSet = true;
+                                Instance.ModHelper.Console.WriteLine(
+                                    "Set ConsoleDisplay TextTemplate(Clone) font size to 48", MessageType.Info);
+                            }
                         }
                     }
                 }
-            }
-            else
-            {
-                ModHelper.Console.WriteLine("not fount ConsoleDisplay");
             }
         }
 
         private void LoadPingFang()
         {
-            string path = $"{ModHelper.OwmlConfig.ModsPath}/{ModHelper.Manifest.UniqueName}/Font/pingfang";
+            var path = $"{ModHelper.OwmlConfig.ModsPath}/{ModHelper.Manifest.UniqueName}/Font/pingfang";
             var ab = AssetBundle.LoadFromFile(path);
             _translateFont = ab.LoadAsset<Font>("PingFang");
             _hudFont = Resources.Load<Font>(@"fonts/chinese/urw global - nimbussanschs medium_dynamic");
@@ -153,6 +176,72 @@ namespace OuterWildFixFont
             __instance._distanceLabel.font = _originFont;
             __instance._distanceLabel.fontSize = 48;
         }
+
+        // ShipLogEntryDescriptionFieldUpdate
+        private static bool ShipLogEntryDescriptionFieldUpdate(ShipLogEntryDescriptionField __instance)
+        {
+            if (__instance._usingGamepad != OWInput.UsingGamepad())
+            {
+                __instance._usingGamepad = !__instance._usingGamepad;
+            }
+
+            float num = __instance._listRoot.anchoredPosition.y;
+            float num2;
+            if (__instance._usingGamepad)
+            {
+                num2 = OWInput.GetValue(InputLibrary.scrollLogText, InputMode.All) * Time.unscaledDeltaTime * 300f;
+            }
+            else
+            {
+                num2 = OWInput.GetValue(InputLibrary.toolOptionY, InputMode.All) * Time.unscaledDeltaTime * 300f;
+            }
+
+            num -= num2;
+            __instance.SetListYPos(num);
+            if (!__instance._hasScrolledView)
+            {
+                bool flag = -__instance._listRoot.anchoredPosition.y >
+                            __instance.GetListBottomPos() + __instance._thisRectTransform.rect.height;
+                bool flag2 = Mathf.Abs(__instance._listRoot.anchoredPosition.y - __instance._origYPos) > 0.1f;
+                __instance._scrollPromptRoot.SetActive(flag && !flag2);
+                __instance.SetScrollPromptVisibility(__instance._scrollPromptRoot.activeSelf);
+                if (flag2)
+                {
+                    __instance._hasScrolledView = true;
+                }
+            }
+
+            bool flag3 = false;
+            for (int i = 0; i < __instance._factListItems.Length; i++)
+            {
+                if (!_isFontSizeSet)
+                {
+                    __instance._factListItems[i]._text.fontSize = _shipLogFontSize;
+                    Instance.ModHelper.Console.WriteLine($"Set _factListItems[{i}] font size to {_shipLogFontSize}",
+                        MessageType.Info);
+                }
+
+                if (__instance._factListItems[i].UpdateTextReveal())
+                {
+                    flag3 = true;
+                }
+            }
+
+            _isFontSizeSet = true;
+
+            if (flag3 && !__instance._audioSource.isPlaying)
+            {
+                __instance._audioSource.Play();
+            }
+
+            if (!flag3 && __instance._audioSource.isPlaying)
+            {
+                __instance._audioSource.Stop();
+            }
+
+            return false;
+        }
+
 
         // 1.1.14 new
         private static bool InitSetup(ShipLogEntryListItem __instance, ShipLogEntry entry, float appearDelay)
@@ -245,8 +334,8 @@ namespace OuterWildFixFont
                         __instance._textContainerList[i].textElement.lineSpacing =
                             __instance._textContainerList[i].originalSpacing;
                         __instance._textContainerList[i].textElement.fontSize =
-                            10;
-                        // TextTranslation.GetModifiedFontSize(__instance._textContainerList[i].originalFontSize);
+                            // 10;
+                            TextTranslation.GetModifiedFontSize(__instance._textContainerList[i].originalFontSize);
                         __instance._textContainerList[i].textElement.rectTransform.localScale =
                             __instance._textContainerList[i].originalScale;
                     }
