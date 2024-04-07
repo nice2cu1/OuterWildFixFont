@@ -1,5 +1,6 @@
 ﻿using OWML.Common;
 using OWML.ModHelper;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -8,13 +9,14 @@ namespace OuterWildFixFont
     public class OuterWildFixFont : ModBehaviour
     {
         private static Font _translateFont;
-        private static Font _originFont;
+        private static Font _translateFontDynamic;
         private static int _shipLogFontSize = 15;
         private static bool _isFontSizeSet = false;
         private GameObject ConsoleDisplay = null;
         private static OuterWildFixFont Instance;
         private bool _isConsoleTextSet = false;
-        private static Font _hudFont;
+        private bool _hasExecuted = false;
+
 
         public void Awake()
         {
@@ -23,22 +25,38 @@ namespace OuterWildFixFont
 
         private void Start()
         {
-            LoadPingFang();
-            ModHelper.Console.WriteLine($"My mod {nameof(OuterWildFixFont)} is loaded!", MessageType.Success);
+            LoadFonts();
+            ModHelper.Console.WriteLine($"{nameof(OuterWildFixFont)} is loaded!", MessageType.Success);
+
+            // ...这是？我忘记了！！！
             ModHelper.HarmonyHelper.AddPrefix<TextTranslation>("GetFont", typeof(OuterWildFixFont),
                 nameof(OuterWildFixFont.GetFont));
+
+            // 翻译器
             ModHelper.HarmonyHelper.AddPrefix<NomaiTranslatorProp>("InitializeFont", typeof(OuterWildFixFont),
                 nameof(OuterWildFixFont.InitTranslatorFont));
+
+            // 人物对话
             ModHelper.HarmonyHelper.AddPrefix<DialogueBoxVer2>("InitializeFont", typeof(OuterWildFixFont),
                 nameof(OuterWildFixFont.InitTranslatorFontDialogue));
+
+            // 覆盖大部分字体
             ModHelper.HarmonyHelper.AddPrefix<FontAndLanguageController>("InitializeFont", typeof(OuterWildFixFont),
                 nameof(OuterWildFixFont.InitializeFont));
+
+            // 1.1.14 new
             ModHelper.HarmonyHelper.AddPrefix<ShipLogEntryListItem>("Setup", typeof(OuterWildFixFont),
                 nameof(OuterWildFixFont.InitSetup));
+
+            // 飞船日志
             ModHelper.HarmonyHelper.AddPrefix<ShipLogEntryDescriptionField>("Update", typeof(OuterWildFixFont),
                 nameof(OuterWildFixFont.ShipLogEntryDescriptionFieldUpdate));
+
+            // 死亡
             ModHelper.HarmonyHelper.AddPostfix<GameOverController>("SetupGameOverScreen", typeof(OuterWildFixFont),
                 nameof(OuterWildFixFont.SetGameOverScreenFont));
+
+            //飞船信号镜
             ModHelper.HarmonyHelper.AddPostfix<SignalscopeUI>("Activate", typeof(OuterWildFixFont),
                 nameof(OuterWildFixFont.Activate));
         }
@@ -52,9 +70,16 @@ namespace OuterWildFixFont
         private void Update()
         {
             var onEnterShip = PlayerState._insideShip;
+            var isDead = PlayerState._isDead;
 
-            if (!_isConsoleTextSet && onEnterShip)
+            if (onEnterShip)
             {
+                _isConsoleTextSet = true;
+            }
+
+            if (_isConsoleTextSet && !_hasExecuted)
+            {
+                // ModHelper.Console.WriteLine("正在设置飞船控制台字体", MessageType.Info);
                 ConsoleDisplay =
                     GameObject.Find(
                         "Ship_Body/Module_Cockpit/Systems_Cockpit/ShipCockpitUI/CockpitCanvases/ShipWorldSpaceUI/ConsoleDisplay/Mask/LayoutGroup");
@@ -67,10 +92,8 @@ namespace OuterWildFixFont
                         if (consoleText)
                         {
                             consoleText.fontSize = 48;
-                            consoleText.font = _originFont;
-                            _isConsoleTextSet = true;
-                            Instance.ModHelper.Console.WriteLine("Set ConsoleDisplay TextTemplate font size to 48",
-                                MessageType.Info);
+                            consoleText.font = _translateFont;
+                            // ModHelper.Console.WriteLine("飞船控制台字体被修改了", MessageType.Info);
                         }
                     }
 
@@ -82,25 +105,32 @@ namespace OuterWildFixFont
                             if (consoleText)
                             {
                                 consoleText.fontSize = 48;
-                                consoleText.font = _originFont;
-                                _isConsoleTextSet = true;
-                                Instance.ModHelper.Console.WriteLine(
-                                    "Set ConsoleDisplay TextTemplate(Clone) font size to 48", MessageType.Info);
+                                consoleText.font = _translateFont;
+                                // ModHelper.Console.WriteLine("飞船控制台字体被修改了", MessageType.Info);
                             }
                         }
                     }
                 }
+
+                _isConsoleTextSet = false;
+                _hasExecuted = true;
+                // ModHelper.Console.WriteLine("飞船控制台字体设置完成", MessageType.Info);
+            }
+
+            if (isDead)
+            {
+                _hasExecuted = false;
+                _isConsoleTextSet = false;
+                // ModHelper.Console.WriteLine("死亡", MessageType.Info);
             }
         }
 
-        private void LoadPingFang()
+        private void LoadFonts()
         {
-            var path = $"{ModHelper.OwmlConfig.ModsPath}/{ModHelper.Manifest.UniqueName}/Font/pingfang";
+            var path = $"{ModHelper.OwmlConfig.ModsPath}/{ModHelper.Manifest.UniqueName}/Font/fonts";
             var ab = AssetBundle.LoadFromFile(path);
-            _translateFont = ab.LoadAsset<Font>("PingFang");
-            _hudFont = Resources.Load<Font>(@"fonts/chinese/urw global - nimbussanschs medium_dynamic");
-            _originFont = Resources.Load<Font>(@"fonts/chinese/urw global - nimbussanschs medium");
-            //URW Global - NimbusSansCHS Medium
+            _translateFont = ab.LoadAsset<Font>("PingFangHK-Regular");
+            _translateFontDynamic = ab.LoadAsset<Font>("PingFangHK-Regular-Dynamic");
             ab.Unload(false);
         }
 
@@ -115,7 +145,7 @@ namespace OuterWildFixFont
 
             if (dynamicFont)
             {
-                __result = _translateFont;
+                __result = _translateFontDynamic;
             }
             else
             {
@@ -136,8 +166,8 @@ namespace OuterWildFixFont
                 return true;
             }
 
-            ____fontInUse = _translateFont;
-            ____dynamicFontInUse = _translateFont;
+            ____fontInUse = _translateFontDynamic;
+            ____dynamicFontInUse = _translateFontDynamic;
             ____fontSpacingInUse = TextTranslation.GetDefaultFontSpacing();
             ____textField.font = ____fontInUse;
             ____textField.lineSpacing = ____fontSpacingInUse;
@@ -171,9 +201,9 @@ namespace OuterWildFixFont
 
         private static void Activate(SignalscopeUI __instance)
         {
-            __instance._signalscopeLabel.font = _originFont;
+            __instance._signalscopeLabel.font = _translateFont;
             __instance._signalscopeLabel.fontSize = 48;
-            __instance._distanceLabel.font = _originFont;
+            __instance._distanceLabel.font = _translateFont;
             __instance._distanceLabel.fontSize = 48;
         }
 
@@ -217,8 +247,6 @@ namespace OuterWildFixFont
                 if (!_isFontSizeSet)
                 {
                     __instance._factListItems[i]._text.fontSize = _shipLogFontSize;
-                    Instance.ModHelper.Console.WriteLine($"Set _factListItems[{i}] font size to {_shipLogFontSize}",
-                        MessageType.Info);
                 }
 
                 if (__instance._factListItems[i].UpdateTextReveal())
@@ -265,7 +293,7 @@ namespace OuterWildFixFont
 
         private static bool InitializeFont(FontAndLanguageController __instance)
         {
-            Font languageFont = _translateFont;
+            Font languageFont = _translateFontDynamic;
             bool flag = TextTranslation.Get().IsLanguageLatin();
             for (int i = 0; i < __instance._textContainerList.Count; i++)
             {
@@ -330,7 +358,7 @@ namespace OuterWildFixFont
                     Font font = TextTranslation.GetFont(__instance._textContainerList[i].originalFont.dynamic);
                     if (__instance._textContainerList[i].originalFont == font)
                     {
-                        __instance._textContainerList[i].textElement.font = _hudFont;
+                        __instance._textContainerList[i].textElement.font = languageFont;
                         __instance._textContainerList[i].textElement.lineSpacing =
                             __instance._textContainerList[i].originalSpacing;
                         __instance._textContainerList[i].textElement.fontSize =
@@ -360,7 +388,7 @@ namespace OuterWildFixFont
                     else
                     {
                         int modifiedFontSize2 = TextTranslation.GetModifiedFontSize(font.fontSize);
-                        __instance._textContainerList[i].textElement.font = font;
+                        __instance._textContainerList[i].textElement.font = languageFont;
                         __instance._textContainerList[i].textElement.lineSpacing =
                             TextTranslation.GetDefaultFontSpacing();
                         if (__instance._textContainerList[i].shouldScale)
