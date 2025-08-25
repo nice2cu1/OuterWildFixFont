@@ -14,9 +14,7 @@ namespace OuterWildFixFont
         private static bool _isFontSizeSet = false;
         private GameObject ConsoleDisplay = null;
         private static OuterWildFixFont Instance;
-        private bool _isConsoleTextSet = false;
-        private bool _hasExecuted = false;
-
+        private bool _shouldSetupConsoleFont = false;
 
         public void Awake()
         {
@@ -59,70 +57,62 @@ namespace OuterWildFixFont
             //飞船信号镜
             ModHelper.HarmonyHelper.AddPostfix<SignalscopeUI>("Activate", typeof(OuterWildFixFont),
                 nameof(OuterWildFixFont.Activate));
+
+            LoadManager.OnCompleteSceneLoad += (scene, loadScene) =>
+            {
+                if (loadScene != OWScene.SolarSystem) return;
+                // 太阳系加载完成，允许Update设置控制台字体
+                _shouldSetupConsoleFont = true;
+                ModHelper.Console.WriteLine("太阳系加载完成，允许设置飞船控制台字体", MessageType.Info);
+            };
+        }
+
+        private void Update()
+        {
+            // 只有在太阳系加载完成后才允许运行
+            if (!_shouldSetupConsoleFont) return;
+
+            ConsoleDisplay =
+                GameObject.Find(
+                    "Ship_Body/Module_Cockpit/Systems_Cockpit/ShipCockpitUI/CockpitCanvases/ShipWorldSpaceUI/ConsoleDisplay/Mask/LayoutGroup");
+            
+            if (ConsoleDisplay)
+            {
+                // ModHelper.Console.WriteLine("找到飞船控制台，正在设置字体", MessageType.Info);
+                
+                Transform consoleTextTransform = ConsoleDisplay.transform.Find("TextTemplate");
+                if (consoleTextTransform && consoleTextTransform.gameObject.activeSelf)
+                {
+                    Text consoleText = consoleTextTransform.GetComponent<Text>();
+                    if (consoleText)
+                    {
+                        consoleText.fontSize = 48;
+                        consoleText.font = _translateFont;
+                    }
+                }
+
+                foreach (Transform child in ConsoleDisplay.transform)
+                {
+                    if (child.name == "TextTemplate(Clone)")
+                    {
+                        Text consoleText = child.GetComponent<Text>();
+                        if (consoleText)
+                        {
+                            consoleText.fontSize = 48;
+                            consoleText.font = _translateFont;
+                        }
+                    }
+                }
+                
+                ModHelper.Console.WriteLine("飞船控制台字体设置完成", MessageType.Success);
+                _shouldSetupConsoleFont = false; // 设置完成后禁用
+            }
         }
 
         public override void Configure(IModConfig config)
         {
             _shipLogFontSize = config.GetSettingsValue<int>("ShipLogFontSize");
             _isFontSizeSet = false;
-        }
-
-        private void Update()
-        {
-            var onEnterShip = PlayerState._insideShip;
-            var isDead = PlayerState._isDead;
-
-            if (onEnterShip)
-            {
-                _isConsoleTextSet = true;
-            }
-
-            if (_isConsoleTextSet && !_hasExecuted)
-            {
-                // ModHelper.Console.WriteLine("正在设置飞船控制台字体", MessageType.Info);
-                ConsoleDisplay =
-                    GameObject.Find(
-                        "Ship_Body/Module_Cockpit/Systems_Cockpit/ShipCockpitUI/CockpitCanvases/ShipWorldSpaceUI/ConsoleDisplay/Mask/LayoutGroup");
-                if (ConsoleDisplay)
-                {
-                    Transform consoleTextTransform = ConsoleDisplay.transform.Find("TextTemplate");
-                    if (consoleTextTransform && consoleTextTransform.gameObject.activeSelf)
-                    {
-                        Text consoleText = consoleTextTransform.GetComponent<Text>();
-                        if (consoleText)
-                        {
-                            consoleText.fontSize = 48;
-                            consoleText.font = _translateFont;
-                            // ModHelper.Console.WriteLine("飞船控制台字体被修改了", MessageType.Info);
-                        }
-                    }
-
-                    foreach (Transform child in ConsoleDisplay.transform)
-                    {
-                        if (child.name == "TextTemplate(Clone)")
-                        {
-                            Text consoleText = child.GetComponent<Text>();
-                            if (consoleText)
-                            {
-                                consoleText.fontSize = 48;
-                                consoleText.font = _translateFont;
-                                // ModHelper.Console.WriteLine("飞船控制台字体被修改了", MessageType.Info);
-                            }
-                        }
-                    }
-                }
-
-                _isConsoleTextSet = false;
-                _hasExecuted = true;
-                // ModHelper.Console.WriteLine("飞船控制台字体设置完成", MessageType.Info);
-            }
-
-            if (isDead)
-            {
-                _hasExecuted = false;
-                _isConsoleTextSet = false;
-                // ModHelper.Console.WriteLine("死亡", MessageType.Info);
-            }
         }
 
         private void LoadFonts()
