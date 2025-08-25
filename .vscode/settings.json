@@ -1,0 +1,13 @@
+{
+    "dotnet.defaultSolution": "OuterWildFixFont.sln",
+    "omnisharp.enableRoslynAnalyzers": true,
+    "omnisharp.enableEditorConfigSupport": true,
+    "files.exclude": {
+        "**/bin": true,
+        "**/obj": true,
+        "**/.vs": true
+    },
+    "files.associations": {
+        "*.cs": "csharp"
+    }
+}

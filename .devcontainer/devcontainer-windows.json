@@ -1,0 +1,43 @@
+{
+  "name": ".NET Desktop Development (Windows)",
+  "image": "mcr.microsoft.com/devcontainers/base:1-windows-2022",
+  
+  "features": {
+    "ghcr.io/devcontainers/features/dotnet:2": {
+      "version": "8.0",
+      "additionalVersions": "6.0"
+    },
+    "ghcr.io/devcontainers/features/powershell:1": {},
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-dotnettools.csharp",
+        "ms-dotnettools.vscode-dotnet-runtime",
+        "ms-vscode.powershell",
+        "formulahendry.dotnet-test-explorer",
+        "jchannon.csharpextensions",
+        "adrianwilczynski.namespace",
+        "kreativ-software.csharpextensions"
+      ],
+      "settings": {
+        "dotnet.defaultSolution": "OuterWildFixFont.sln",
+        "omnisharp.enableRoslynAnalyzers": true,
+        "omnisharp.enableEditorConfigSupport": true,
+        "files.exclude": {
+          "**/bin": true,
+          "**/obj": true,
+          "**/.vs": true
+        }
+      }
+    }
+  },
+
+  "postCreateCommand": "powershell -File .devcontainer/setup.ps1",
+
+  "forwardPorts": [],
+
+  "remoteUser": "vscode"
+}
