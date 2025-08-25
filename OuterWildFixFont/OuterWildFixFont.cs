@@ -63,7 +63,7 @@ namespace OuterWildFixFont
                 if (loadScene != OWScene.SolarSystem) return;
                 // 太阳系加载完成，允许Update设置控制台字体
                 _shouldSetupConsoleFont = true;
-                ModHelper.Console.WriteLine("太阳系加载完成，允许设置飞船控制台字体", MessageType.Info);
+                // ModHelper.Console.WriteLine("太阳系加载完成，允许设置飞船控制台字体", MessageType.Info);
             };
         }
 
@@ -104,7 +104,7 @@ namespace OuterWildFixFont
                     }
                 }
                 
-                ModHelper.Console.WriteLine("飞船控制台字体设置完成", MessageType.Success);
+                // ModHelper.Console.WriteLine("飞船控制台字体设置完成", MessageType.Success);
                 _shouldSetupConsoleFont = false; // 设置完成后禁用
             }
         }
