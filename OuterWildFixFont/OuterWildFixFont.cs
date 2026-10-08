@@ -1,6 +1,8 @@
-﻿using OWML.Common;
+using System;
+using System.IO;
+using System.Collections.Generic;
+using OWML.Common;
 using OWML.ModHelper;
-using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -10,11 +12,16 @@ namespace OuterWildFixFont
     {
         private static Font _translateFont;
         private static Font _translateFontDynamic;
-        private static int _shipLogFontSize = 15;
-        private static bool _isFontSizeSet = false;
-        private GameObject ConsoleDisplay = null;
+        private static byte[] _fontContainer;
+        private static int _shipLogFontSize = 20;
+        private static readonly Dictionary<Text, ShipLogTextFont> _shipLogTextFonts =
+            new Dictionary<Text, ShipLogTextFont>();
+        private static readonly HashSet<Text> _shipDisplayTexts = new HashSet<Text>();
+        internal static bool IsChinese { get; private set; }
+        internal static int ShipLogFontSize => _shipLogFontSize;
         private static OuterWildFixFont Instance;
-        private bool _shouldSetupConsoleFont = false;
+        private float _nextShipTextSearch;
+        private readonly List<Text> _shipTexts = new List<Text>();
 
         public void Awake()
         {
@@ -23,32 +30,33 @@ namespace OuterWildFixFont
 
         private void Start()
         {
-            LoadFonts();
+            if (!LoadFonts()) return;
+            IsChinese = TextTranslation.Get().GetLanguage() == TextTranslation.Language.CHINESE_SIMPLE;
+            ModHelper.HarmonyHelper.AddPostfix<UIStyleManager>("GetShipLogFont", typeof(OuterWildFixFont),
+                nameof(GetShipLogFont));
+            ModHelper.HarmonyHelper.AddPostfix<Text>("get_pixelsPerUnit", typeof(OuterWildFixFont),
+                nameof(GetShipLogPixelsPerUnit));
+            ModHelper.HarmonyHelper.AddPostfix<ShipLogFactListItem>("Start", typeof(OuterWildFixFont),
+                nameof(InitializeShipLogFactFont));
             ModHelper.Console.WriteLine($"{nameof(OuterWildFixFont)} is loaded!", MessageType.Success);
 
             // ...这是？我忘记了！！！
             ModHelper.HarmonyHelper.AddPrefix<TextTranslation>("GetFont", typeof(OuterWildFixFont),
                 nameof(OuterWildFixFont.GetFont));
 
-            // 翻译器
-            ModHelper.HarmonyHelper.AddPrefix<NomaiTranslatorProp>("InitializeFont", typeof(OuterWildFixFont),
-                nameof(OuterWildFixFont.InitTranslatorFont));
-
-            // 人物对话
-            ModHelper.HarmonyHelper.AddPrefix<DialogueBoxVer2>("InitializeFont", typeof(OuterWildFixFont),
-                nameof(OuterWildFixFont.InitTranslatorFontDialogue));
-
-            // 覆盖大部分字体
-            ModHelper.HarmonyHelper.AddPrefix<FontAndLanguageController>("InitializeFont", typeof(OuterWildFixFont),
-                nameof(OuterWildFixFont.InitializeFont));
+            // 语言字体也走游戏原本的排版逻辑
+            ModHelper.HarmonyHelper.AddPrefix<TextTranslation>("GetLanguageFont", typeof(OuterWildFixFont),
+                nameof(GetLanguageFont));
 
             // 1.1.14 new
-            ModHelper.HarmonyHelper.AddPrefix<ShipLogEntryListItem>("Setup", typeof(OuterWildFixFont),
+            ModHelper.HarmonyHelper.AddPostfix<ShipLogEntryListItem>("Setup", typeof(OuterWildFixFont),
                 nameof(OuterWildFixFont.InitSetup));
 
-            // 飞船日志
-            ModHelper.HarmonyHelper.AddPrefix<ShipLogEntryDescriptionField>("Update", typeof(OuterWildFixFont),
-                nameof(OuterWildFixFont.ShipLogEntryDescriptionFieldUpdate));
+            // 条目切换时缓存完整文字，渐显过程中不再重复估算贴图
+            ModHelper.HarmonyHelper.AddPostfix<ShipLogFactListItem>("DisplayFact", typeof(OuterWildFixFont),
+                nameof(InitializeShipLogFactFont));
+            ModHelper.HarmonyHelper.AddPostfix<ShipLogFactListItem>("DisplayText", typeof(OuterWildFixFont),
+                nameof(InitializeShipLogFactFont));
 
             // 死亡
             ModHelper.HarmonyHelper.AddPostfix<GameOverController>("SetupGameOverScreen", typeof(OuterWildFixFont),
@@ -58,70 +66,140 @@ namespace OuterWildFixFont
             ModHelper.HarmonyHelper.AddPostfix<SignalscopeUI>("Activate", typeof(OuterWildFixFont),
                 nameof(OuterWildFixFont.Activate));
 
-            LoadManager.OnCompleteSceneLoad += (scene, loadScene) =>
-            {
-                if (loadScene != OWScene.SolarSystem) return;
-                // 太阳系加载完成，允许Update设置控制台字体
-                _shouldSetupConsoleFont = true;
-                // ModHelper.Console.WriteLine("太阳系加载完成，允许设置飞船控制台字体", MessageType.Info);
-            };
+            // 控制台的测试文本、模板和消息池使用同一字体与布局参数
+            ModHelper.HarmonyHelper.AddPostfix<ShipNotificationDisplay>("Start", typeof(OuterWildFixFont),
+                nameof(InitializeShipConsoleFont));
+            ModHelper.HarmonyHelper.AddPostfix<ShipNotificationDisplay>("ExpandPool", typeof(OuterWildFixFont),
+                nameof(InitializeShipConsoleFont));
         }
 
         private void Update()
         {
-            // 只有在太阳系加载完成后才允许运行
-            if (!_shouldSetupConsoleFont) return;
+            IsChinese = TextTranslation.Get().GetLanguage() == TextTranslation.Language.CHINESE_SIMPLE;
+            if (!_translateFontDynamic || !IsChinese) return;
 
-            ConsoleDisplay =
-                GameObject.Find(
-                    "Ship_Body/Module_Cockpit/Systems_Cockpit/ShipCockpitUI/CockpitCanvases/ShipWorldSpaceUI/ConsoleDisplay/Mask/LayoutGroup");
-            
-            if (ConsoleDisplay)
+            // 定期重新发现对象，兼容恒星际穿越后的飞船和 UI 重建
+            if (Time.unscaledTime >= _nextShipTextSearch)
             {
-                // ModHelper.Console.WriteLine("找到飞船控制台，正在设置字体", MessageType.Info);
-                
-                Transform consoleTextTransform = ConsoleDisplay.transform.Find("TextTemplate");
-                if (consoleTextTransform && consoleTextTransform.gameObject.activeSelf)
+                _nextShipTextSearch = Time.unscaledTime + 1f;
+                _shipTexts.Clear();
+                _shipDisplayTexts.RemoveWhere(text => !text);
+                foreach (var display in Resources.FindObjectsOfTypeAll<ShipNotificationDisplay>())
                 {
-                    Text consoleText = consoleTextTransform.GetComponent<Text>();
-                    if (consoleText)
-                    {
-                        consoleText.fontSize = 48;
-                        consoleText.font = _translateFont;
-                    }
+                    if (!display.gameObject.scene.IsValid() || !display.gameObject.scene.isLoaded) continue;
+                    foreach (var text in display.GetComponentsInChildren<Text>(true))
+                        if (!_shipTexts.Contains(text)) _shipTexts.Add(text);
                 }
-
-                foreach (Transform child in ConsoleDisplay.transform)
+                foreach (var scope in Resources.FindObjectsOfTypeAll<SignalscopeUI>())
                 {
-                    if (child.name == "TextTemplate(Clone)")
-                    {
-                        Text consoleText = child.GetComponent<Text>();
-                        if (consoleText)
-                        {
-                            consoleText.fontSize = 48;
-                            consoleText.font = _translateFont;
-                        }
-                    }
+                    if (!scope.gameObject.scene.IsValid() || !scope.gameObject.scene.isLoaded) continue;
+                    if (scope._signalscopeLabel && !_shipTexts.Contains(scope._signalscopeLabel))
+                        _shipTexts.Add(scope._signalscopeLabel);
+                    if (scope._distanceLabel && !_shipTexts.Contains(scope._distanceLabel))
+                        _shipTexts.Add(scope._distanceLabel);
                 }
-                
-                // ModHelper.Console.WriteLine("飞船控制台字体设置完成", MessageType.Success);
-                _shouldSetupConsoleFont = false; // 设置完成后禁用
             }
+
+            // 每帧只检查已缓存文本，游戏或其他 MOD 重置字体后再次应用
+            for (int i = _shipTexts.Count - 1; i >= 0; i--)
+            {
+                if (!_shipTexts[i]) _shipTexts.RemoveAt(i);
+                else
+                {
+                    var text = _shipTexts[i];
+                    ApplyShipDisplayFont(text);
+
+                }
+            }
+        }
+
+        private static void ApplyShipDisplayFont(Text text)
+        {
+            if (!text || !_translateFontDynamic) return;
+            bool samplingChanged = _shipDisplayTexts.Add(text);
+            if (text.font != _translateFontDynamic) text.font = _translateFontDynamic;
+            // Text.mainTexture 会提供动态字形贴图，UI 默认材质同时支持遮罩和裁剪
+            if (text.material != Graphic.defaultGraphicMaterial)
+                text.material = null;
+            var style = text.GetComponent<TextStyleApplier>();
+            if (style)
+            {
+                if (style.font != text.font) style.font = text.font;
+                if (style.fixedWidth != text.fontSize) style.fixedWidth = text.fontSize;
+            }
+            if (samplingChanged) text.SetAllDirty();
+        }
+
+        private static void InitializeShipConsoleFont(ShipNotificationDisplay __instance)
+        {
+            if (!_translateFontDynamic || TextTranslation.Get().GetLanguage() != TextTranslation.Language.CHINESE_SIMPLE)
+                return;
+
+            foreach (var text in __instance.GetComponentsInChildren<Text>(true))
+                ApplyShipDisplayFont(text);
         }
 
         public override void Configure(IModConfig config)
         {
-            _shipLogFontSize = config.GetSettingsValue<int>("ShipLogFontSize");
-            _isFontSizeSet = false;
+            _shipLogFontSize = Mathf.Clamp(config.GetSettingsValue<int>("ShipLogFontSize"), 10, 20);
         }
 
-        private void LoadFonts()
+        private bool LoadFonts()
         {
-            var path = $"{ModHelper.OwmlConfig.ModsPath}/{ModHelper.Manifest.UniqueName}/Font/fonts";
-            var ab = AssetBundle.LoadFromFile(path);
-            _translateFont = ab.LoadAsset<Font>("PingFangHK-Regular");
-            _translateFontDynamic = ab.LoadAsset<Font>("PingFangHK-Regular-Dynamic");
-            ab.Unload(false);
+            var path = Path.Combine(Path.GetDirectoryName(typeof(OuterWildFixFont).Assembly.Location),
+                "Fonts", "GameFont.ttf");
+            try
+            {
+                if (!File.Exists(path))
+                    throw new FileNotFoundException("Font file was not found.", path);
+
+                var data = RuntimeFontData.BuildBundle(File.ReadAllBytes(path));
+                _translateFont = LoadFileFont(data);
+                _translateFontDynamic = LoadFileFont(data);
+                _fontContainer = data;
+                return true;
+            }
+            catch (Exception exception)
+            {
+                if (_translateFont) Destroy(_translateFont);
+                if (_translateFontDynamic) Destroy(_translateFontDynamic);
+                _translateFont = _translateFontDynamic = null;
+                ModHelper.Console.WriteLine($"Failed to load font '{path}': {exception.Message}", MessageType.Error);
+                return false;
+            }
+        }
+
+        private static Font LoadFileFont(byte[] data, bool validate = true)
+        {
+            var bundle = AssetBundle.LoadFromMemory(data);
+            if (!bundle) throw new InvalidDataException("Unity rejected the generated font container.");
+            Font font = null;
+            try
+            {
+                font = bundle.LoadAsset<Font>("assets/gamefont.ttf");
+                if (!font || !font.dynamic || !font.HasCharacter('A') || !font.HasCharacter('\u4E2D') ||
+                    !font.HasCharacter('\u6587'))
+                    throw new InvalidDataException("The embedded TTF did not produce a dynamic font with A, 中 and 文.");
+                if (validate)
+                {
+                    font.RequestCharactersInTexture("A\u4E2D\u6587", 48, FontStyle.Normal);
+                    CharacterInfo glyph;
+                    if (!font.GetCharacterInfo('\u4E2D', out glyph, 48) || !font.material || !font.material.mainTexture)
+                        throw new InvalidDataException("Unity could not rasterize the embedded font's Chinese glyph.");
+                }
+                DontDestroyOnLoad(font);
+                return font;
+            }
+            catch
+            {
+                if (font) Destroy(font);
+                throw;
+            }
+            finally
+            {
+                // Release the container so a second independent atlas can be loaded.
+                bundle.Unload(false);
+            }
         }
 
         private static bool GetFont(
@@ -145,43 +223,60 @@ namespace OuterWildFixFont
             return false;
         }
 
-        private static bool InitTranslatorFont(
-            ref Font ____fontInUse,
-            ref Font ____dynamicFontInUse,
-            ref float ____fontSpacingInUse,
-            ref Text ____textField)
+        private static bool GetLanguageFont(ref Font __result)
         {
-            if (TextTranslation.Get().GetLanguage() != TextTranslation.Language.CHINESE_SIMPLE)
-            {
-                return true;
-            }
-
-            ____fontInUse = _translateFontDynamic;
-            ____dynamicFontInUse = _translateFontDynamic;
-            ____fontSpacingInUse = TextTranslation.GetDefaultFontSpacing();
-            ____textField.font = ____fontInUse;
-            ____textField.lineSpacing = ____fontSpacingInUse;
-            return false;
+            return GetFont(true, ref __result);
         }
 
-        private static bool InitTranslatorFontDialogue(DialogueBoxVer2 __instance)
+        private static void GetShipLogFont(ref Font __result)
         {
-            if (TextTranslation.Get().IsLanguageLatin())
-            {
-                __instance._fontInUse = __instance._defaultDialogueFont;
-                __instance._dynamicFontInUse = __instance._defaultDialogueFontDynamic;
-            }
-            else
-            {
-                __instance._fontInUse = TextTranslation.GetFont(false);
-                __instance._dynamicFontInUse = TextTranslation.GetFont(true);
-            }
+            if (_translateFont && TextTranslation.Get().GetLanguage() == TextTranslation.Language.CHINESE_SIMPLE)
+                __result = _translateFont;
+        }
 
-            __instance._mainTextField.font = __instance._fontInUse;
-            __instance._nameTextField.font = __instance._fontInUse;
-            __instance._optionBox.GetRequiredComponent<DialogueOptionUI>().textElement.font = __instance._fontInUse;
+        internal static Font CreateShipLogTextFont() => LoadFileFont(_fontContainer, false);
 
-            return false;
+        internal static void RegisterShipLogTextFont(Text text, ShipLogTextFont owner)
+        {
+            _shipLogTextFonts[text] = owner;
+        }
+
+        internal static void UnregisterShipLogTextFont(Text text, ShipLogTextFont owner)
+        {
+            if (ReferenceEquals(text, null)) return;
+            if (_shipLogTextFonts.TryGetValue(text, out var current) && current == owner)
+                _shipLogTextFonts.Remove(text);
+        }
+
+        private static void ApplyShipLogTextFont(Text text, bool useConfiguredSize, string completeText)
+        {
+            if (!text) return;
+            if (!_shipLogTextFonts.TryGetValue(text, out var owner) || !owner)
+            {
+                owner = text.GetComponent<ShipLogTextFont>();
+                if (!owner) owner = text.gameObject.AddComponent<ShipLogTextFont>();
+                owner.Initialize(text, useConfiguredSize);
+            }
+            owner.SetText(completeText);
+            owner.Apply();
+        }
+
+        private static void InitializeShipLogFactFont(ShipLogFactListItem __instance)
+        {
+            var completeText = __instance._fact != null ? __instance._fact.GetText() : __instance._text.text;
+            ApplyShipLogTextFont(__instance._text, true, completeText);
+        }
+
+        private static void GetShipLogPixelsPerUnit(Text __instance, ref float __result)
+        {
+            // 世界空间 Canvas 的倍率可能高达数百，动态字体会撞上 Unity 字号上限
+            if (_shipDisplayTexts.Contains(__instance) && __instance.font == _translateFontDynamic)
+            {
+                __result = Mathf.Min(__result, 64f / Mathf.Max(1, __instance.fontSize));
+                return;
+            }
+            if (_shipLogTextFonts.TryGetValue(__instance, out var owner) && owner && owner.Owns(__instance.font))
+                __result = owner.SamplingDensity(__result);
         }
 
         private static void SetGameOverScreenFont(ref Text ____deathText)
@@ -191,243 +286,15 @@ namespace OuterWildFixFont
 
         private static void Activate(SignalscopeUI __instance)
         {
-            __instance._signalscopeLabel.font = _translateFont;
-            __instance._signalscopeLabel.fontSize = 48;
-            __instance._distanceLabel.font = _translateFont;
-            __instance._distanceLabel.fontSize = 48;
+            if (TextTranslation.Get().GetLanguage() != TextTranslation.Language.CHINESE_SIMPLE) return;
+            ApplyShipDisplayFont(__instance._signalscopeLabel);
+            ApplyShipDisplayFont(__instance._distanceLabel);
         }
 
-        // ShipLogEntryDescriptionFieldUpdate
-        private static bool ShipLogEntryDescriptionFieldUpdate(ShipLogEntryDescriptionField __instance)
+        // 保留游戏原本的字号、布局和动画初始化，只在最后替换字体
+        private static void InitSetup(ShipLogEntryListItem __instance)
         {
-            if (__instance._usingGamepad != OWInput.UsingGamepad())
-            {
-                __instance._usingGamepad = !__instance._usingGamepad;
-            }
-
-            float num = __instance._listRoot.anchoredPosition.y;
-            float num2;
-            if (__instance._usingGamepad)
-            {
-                num2 = OWInput.GetValue(InputLibrary.scrollLogText, InputMode.All) * Time.unscaledDeltaTime * 300f;
-            }
-            else
-            {
-                num2 = OWInput.GetValue(InputLibrary.toolOptionY, InputMode.All) * Time.unscaledDeltaTime * 300f;
-            }
-
-            num -= num2;
-            __instance.SetListYPos(num);
-            if (!__instance._hasScrolledView)
-            {
-                bool flag = -__instance._listRoot.anchoredPosition.y >
-                            __instance.GetListBottomPos() + __instance._thisRectTransform.rect.height;
-                bool flag2 = Mathf.Abs(__instance._listRoot.anchoredPosition.y - __instance._origYPos) > 0.1f;
-                __instance._scrollPromptRoot.SetActive(flag && !flag2);
-                __instance.SetScrollPromptVisibility(__instance._scrollPromptRoot.activeSelf);
-                if (flag2)
-                {
-                    __instance._hasScrolledView = true;
-                }
-            }
-
-            bool flag3 = false;
-            for (int i = 0; i < __instance._factListItems.Length; i++)
-            {
-                if (!_isFontSizeSet)
-                {
-                    __instance._factListItems[i]._text.fontSize = _shipLogFontSize;
-                }
-
-                if (__instance._factListItems[i].UpdateTextReveal())
-                {
-                    flag3 = true;
-                }
-            }
-
-            _isFontSizeSet = true;
-
-            if (flag3 && !__instance._audioSource.isPlaying)
-            {
-                __instance._audioSource.Play();
-            }
-
-            if (!flag3 && __instance._audioSource.isPlaying)
-            {
-                __instance._audioSource.Stop();
-            }
-
-            return false;
-        }
-
-
-        // 1.1.14 new
-        private static bool InitSetup(ShipLogEntryListItem __instance, ShipLogEntry entry, float appearDelay)
-        {
-            __instance._entry = entry;
-            __instance.UpdateNameField();
-            __instance._unreadIcon.gameObject.SetActive(false);
-            __instance._hudMarkerIcon.gameObject.SetActive(false);
-            __instance._moreToExploreIcon.gameObject.SetActive(false);
-            __instance.gameObject.SetActive(true);
-            __instance._animRoot.anchoredPosition = new Vector2(-10f, 0.0f);
-            __instance._animAlpha = 0.0f;
-            __instance._hasFocus = false;
-            __instance._focusAlpha = 0.2f;
-            __instance.UpdateAlpha();
-            // __instance._uiSizeSetter.MarkReadyForInitialization();
-            // __instance._uiSizeSetter.DoResizeAction(PlayerData.GetTextSize());
-            __instance.AnimateTo(1f, __instance.GetEntryIndentation(), 0.05f, appearDelay);
-            return false;
-        }
-
-        private static bool InitializeFont(FontAndLanguageController __instance)
-        {
-            Font languageFont = _translateFontDynamic;
-            bool flag = TextTranslation.Get().IsLanguageLatin();
-            for (int i = 0; i < __instance._textContainerList.Count; i++)
-            {
-                TextStyleApplier component =
-                    __instance._textContainerList[i].textElement.GetComponent<TextStyleApplier>();
-                if (__instance._textContainerList[i].isLanguageFont)
-                {
-                    if (__instance._textContainerList[i].originalFont == languageFont)
-                    {
-                        __instance._textContainerList[i].textElement.font = languageFont;
-                        __instance._textContainerList[i].textElement.lineSpacing =
-                            __instance._textContainerList[i].originalSpacing;
-                        __instance._textContainerList[i].textElement.fontSize =
-                            TextTranslation.GetModifiedFontSize(__instance._textContainerList[i].originalFontSize);
-                        __instance._textContainerList[i].textElement.rectTransform.localScale =
-                            __instance._textContainerList[i].originalScale;
-                    }
-                    else
-                    {
-                        int modifiedFontSize = TextTranslation.GetModifiedFontSize(languageFont.fontSize);
-                        __instance._textContainerList[i].textElement.font = languageFont;
-                        __instance._textContainerList[i].textElement.lineSpacing =
-                            TextTranslation.GetDefaultFontSpacing();
-                        if (__instance._textContainerList[i].shouldScale)
-                        {
-                            __instance._textContainerList[i].textElement.fontSize = modifiedFontSize;
-                            Vector3 vector = __instance._textContainerList[i].originalScale *
-                                             ((float)__instance._textContainerList[i].originalFontSize /
-                                              (float)modifiedFontSize);
-                            __instance._textContainerList[i].textElement.rectTransform.localScale = vector;
-                        }
-                        else
-                        {
-                            __instance._textContainerList[i].textElement.fontSize =
-                                TextTranslation.GetModifiedFontSize(__instance._textContainerList[i].originalFontSize);
-                        }
-
-                        if (__instance._textContainerList[i].useDefaultLineSpacing)
-                        {
-                            __instance._textContainerList[i].textElement.lineSpacing =
-                                TextTranslation.GetDefaultFontSpacing();
-                        }
-                        else
-                        {
-                            __instance._textContainerList[i].textElement.lineSpacing =
-                                __instance._textContainerList[i].originalSpacing;
-                        }
-                    }
-                }
-                else if (flag)
-                {
-                    __instance._textContainerList[i].textElement.font = __instance._textContainerList[i].originalFont;
-                    __instance._textContainerList[i].textElement.lineSpacing =
-                        __instance._textContainerList[i].originalSpacing;
-                    __instance._textContainerList[i].textElement.fontSize =
-                        __instance._textContainerList[i].originalFontSize;
-                    __instance._textContainerList[i].textElement.rectTransform.localScale =
-                        __instance._textContainerList[i].originalScale;
-                }
-                else
-                {
-                    Font font = TextTranslation.GetFont(__instance._textContainerList[i].originalFont.dynamic);
-                    if (__instance._textContainerList[i].originalFont == font)
-                    {
-                        __instance._textContainerList[i].textElement.font = languageFont;
-                        __instance._textContainerList[i].textElement.lineSpacing =
-                            __instance._textContainerList[i].originalSpacing;
-                        __instance._textContainerList[i].textElement.fontSize =
-                            // 10;
-                            TextTranslation.GetModifiedFontSize(__instance._textContainerList[i].originalFontSize);
-                        __instance._textContainerList[i].textElement.rectTransform.localScale =
-                            __instance._textContainerList[i].originalScale;
-                    }
-                    else if (font.dynamic)
-                    {
-                        __instance._textContainerList[i].textElement.fontSize =
-                            TextTranslation.GetModifiedFontSize(__instance._textContainerList[i].originalFontSize);
-                        __instance._textContainerList[i].textElement.rectTransform.localScale =
-                            __instance._textContainerList[i].originalScale;
-                        __instance._textContainerList[i].textElement.font = languageFont;
-                        if (__instance._textContainerList[i].useDefaultLineSpacing)
-                        {
-                            __instance._textContainerList[i].textElement.lineSpacing =
-                                TextTranslation.GetDefaultFontSpacing();
-                        }
-                        else
-                        {
-                            __instance._textContainerList[i].textElement.lineSpacing =
-                                __instance._textContainerList[i].originalSpacing;
-                        }
-                    }
-                    else
-                    {
-                        int modifiedFontSize2 = TextTranslation.GetModifiedFontSize(font.fontSize);
-                        __instance._textContainerList[i].textElement.font = languageFont;
-                        __instance._textContainerList[i].textElement.lineSpacing =
-                            TextTranslation.GetDefaultFontSpacing();
-                        if (__instance._textContainerList[i].shouldScale)
-                        {
-                            __instance._textContainerList[i].textElement.fontSize = modifiedFontSize2;
-                            Vector3 vector2 = __instance._textContainerList[i].originalScale *
-                                              ((float)__instance._textContainerList[i].originalFontSize /
-                                               (float)modifiedFontSize2);
-                            __instance._textContainerList[i].textElement.rectTransform.localScale = vector2;
-                        }
-                        else
-                        {
-                            __instance._textContainerList[i].textElement.fontSize =
-                                TextTranslation.GetModifiedFontSize(__instance._textContainerList[i].originalFontSize);
-                        }
-
-                        if (__instance._textContainerList[i].useDefaultLineSpacing)
-                        {
-                            __instance._textContainerList[i].textElement.lineSpacing =
-                                TextTranslation.GetDefaultFontSpacing();
-                        }
-                        else
-                        {
-                            __instance._textContainerList[i].textElement.lineSpacing =
-                                __instance._textContainerList[i].originalSpacing;
-                        }
-                    }
-                }
-
-                if (component != null)
-                {
-                    component.font = __instance._textContainerList[i].textElement.font;
-                    if (!TextTranslation.Get().IsLanguageLatin() &&
-                        TextTranslation.Get().GetLanguage() != TextTranslation.Language.RUSSIAN &&
-                        TextTranslation.Get().GetLanguage() != TextTranslation.Language.POLISH &&
-                        TextTranslation.Get().GetLanguage() != TextTranslation.Language.TURKISH)
-                    {
-                        component.fixedWidth = (float)__instance._textContainerList[i].textElement.font.fontSize;
-                    }
-                    else
-                    {
-                        component.fixedWidth = 0f;
-                    }
-                }
-
-                __instance._textContainerList[i].textElement.SetAllDirty();
-            }
-
-            return false;
+            ApplyShipLogTextFont(__instance._nameField, false, __instance._nameField.text);
         }
     }
 }

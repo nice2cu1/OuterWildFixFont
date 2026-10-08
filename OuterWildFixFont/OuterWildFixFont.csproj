@@ -1,6 +1,7 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net48</TargetFramework>
+    <Version>3.0.0</Version>
     <LangVersion>latest</LangVersion>
     <Copyright>Copyright © 2023 nice2cu1</Copyright>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -17,7 +18,11 @@
     <PackageReference Include="OuterWildsGameLibs" Version="1.1.13.393" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Resources\FontTemplate.bin" LogicalName="OuterWildFixFont.FontTemplate" />
     <None Include="default-config.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Fonts\GameFont.ttf">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Include="manifest.json">

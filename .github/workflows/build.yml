@@ -1,0 +1,40 @@
+name: Build
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build and package
+        id: package
+        shell: pwsh
+        run: |
+          $version = (Get-Content OuterWildFixFont/manifest.json -Raw | ConvertFrom-Json).version
+          ./scripts/package.ps1 -Version $version
+      - uses: actions/upload-artifact@v7
+        with:
+          name: OuterWildFixFont-build-${{ github.sha }}
+          path: |
+            ${{ steps.package.outputs.archive }}
+            ${{ steps.package.outputs.checksum }}
+          if-no-files-found: error
+          retention-days: 14

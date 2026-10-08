@@ -2,12 +2,23 @@
   "$schema": "https://raw.githubusercontent.com/ow-mods/owml/master/schemas/config_schema.json",
   "enabled": true,
   "settings": {
+    "FontDescription": {
+      "type": "label",
+      "title": "使用自定义字体显示中文，补全缺失字形",
+      "side": "center"
+    },
+    "FontDescriptionDetails": {
+      "type": "label",
+      "title": "下方可调整飞船日志正文字号",
+      "side": "center"
+    },
     "ShipLogFontSize": {
-      "title" : "Ship Log Font Size",
+      "title": "飞船日志正文字号",
+      "tooltip": "调整飞船日志正文的文字大小。数值越大，文字越大。默认值为 20，范围为 10～20",
       "type": "slider",
       "min": 10,
       "max": 20,
-      "value": 15
+      "value": 20
     }
   }
 }
