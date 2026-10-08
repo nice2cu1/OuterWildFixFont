@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '可选版号（例如 3.0.5 或 v3.0.5）；留空自动递增'
+        description: '可选版号（例如 3.0.5）；留空自动递增，Release 标签不加 v 前缀'
         required: false
         type: string
         default: ''
@@ -79,7 +79,7 @@ jobs:
             $occupied = @(@($tags) + @($releases | ForEach-Object { $_.tag_name }) |
               Where-Object { ($_ -replace '^v', '') -eq $version })
             if ($occupied.Count -gt 0) { throw "Version $version already exists." }
-            $tag = "v$version"
+            $tag = $version
           }
           "version=$version" >> $env:GITHUB_OUTPUT
           "tag=$tag" >> $env:GITHUB_OUTPUT
